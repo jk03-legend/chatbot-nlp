@@ -2,4 +2,4 @@ Flask
 Flask-Cors
 SpeechRecognition
 gunicorn
-transformers
+sentence_transformers
