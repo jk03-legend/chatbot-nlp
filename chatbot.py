@@ -1,29 +1,31 @@
+import faiss
+import numpy as np
 from flask import Flask, request, jsonify
 import speech_recognition as sr
 from flask_cors import CORS
-import hashlib
-from transformers import pipeline
+from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 CORS(app)
 
-cache = {}
+# Load model & FAISS index
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+index = faiss.read_index("knowledge_base.index")
+knowledge_questions = np.load("knowledge_questions.npy", allow_pickle=True)
 
-# Load NLP models
-sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-qa_pipeline = pipeline("question-answering", model="deepset/roberta-base-squad2")  # Example for Q&A
-ner_model = pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
-
-# Knowledge Base (Static)
+# Load predefined answers
 knowledge_base = {
-    "what is your name": "I am an AI-powered assistant.",
-    "who created you": "I was created by an amazing developer!",
-    "what is ai": "AI stands for Artificial Intelligence, which enables machines to mimic human intelligence."
+    "what is AI?": "AI stands for Artificial Intelligence...",
+    "who created you?": "I was created by an amazing developer!",
+    "how does speech recognition work?": "Speech recognition converts spoken words into text..."
 }
 
-def get_audio_hash(audio_bytes):
-    """Generate a stable hash for the audio content."""
-    return hashlib.md5(audio_bytes).hexdigest()
+def find_best_match(query):
+    """Find the closest question in the knowledge base."""
+    query_vector = np.array([embedding_model.encode(query)]).astype("float32")
+    D, I = index.search(query_vector, 1)  # Find closest match
+    best_match = knowledge_questions[I[0][0]] if D[0][0] < 0.5 else None
+    return knowledge_base.get(best_match, "I don't have an answer for that.")
 
 @app.route('/recognize', methods=['POST'])
 def recognize_speech():
@@ -31,44 +33,20 @@ def recognize_speech():
         return jsonify({"error": "No audio file uploaded"}), 400
 
     file = request.files['file']
-    audio_bytes = file.read()
-
-    audio_hash = get_audio_hash(audio_bytes)
-
-    if audio_hash in cache:
-        return jsonify({"text": cache[audio_hash], "nlp_results": cache[audio_hash + "_nlp"]})
-
-    file.seek(0)  # Reset file pointer
     recognizer = sr.Recognizer()
     
     try:
         with sr.AudioFile(file) as source:
-            recognizer.adjust_for_ambient_noise(source, duration=1)  # Adjust for noise
-            audio = recognizer.record(source, duration=None)  # Capture full audio
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            audio = recognizer.record(source, duration=None)
         
-        results = recognizer.recognize_google(audio, language="en-US", show_all=True)
+        text = recognizer.recognize_google(audio, language="en-US").lower()
 
-        if results and "alternative" in results:
-            text = results["alternative"][0]["transcript"].lower()  # Normalize text
-        else:
-            return jsonify({"error": "Could not understand audio"}), 400
+        # Search knowledge base
+        chatbot_response = find_best_match(text)
 
-        # Check if question is in knowledge base
-        answer = knowledge_base.get(text, "I don't know the answer to that. Can you provide more details?")
+        return jsonify({"text": text, "chatbot_response": chatbot_response})
 
-        # NLP Processing
-        sentiment_result = sentiment_analyzer(text)
-
-        nlp_results = {
-            "sentiment": sentiment_result,
-            "knowledge_base_answer": answer
-        }
-
-        cache[audio_hash] = text  # Store recognized text in cache
-        cache[audio_hash + "_nlp"] = nlp_results  # Store NLP results in cache
-
-        return jsonify({"text": text, "nlp_results": nlp_results})
-    
     except sr.UnknownValueError:
         return jsonify({"error": "Could not understand audio"}), 400
     except sr.RequestError:
