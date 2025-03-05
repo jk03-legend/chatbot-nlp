@@ -7,13 +7,23 @@ from flask import Flask, request, jsonify
 import speech_recognition as sr
 from flask_cors import CORS
 from sentence_transformers import SentenceTransformer
+import threading
 
 app = Flask(__name__)
 CORS(app)
 
 # Load embedding model
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+lock = threading.Lock()  # Prevent multi-threading issues
 
+def load_faiss_index():
+    if not os.path.exists(INDEX_FILE) or not os.path.exists(QUESTIONS_FILE):
+        create_faiss_index()
+    return faiss.read_index(INDEX_FILE), np.load(QUESTIONS_FILE, allow_pickle=True)
+
+# Load FAISS index once
+index = faiss.IndexHNSWFlat(question_vectors.shape[1], 32)  # HNSW indexing
+index.hnsw.efSearch = 64  # Faster search
 # Knowledge Base (Modify/Add More)
 knowledge_base = {
     "what is AI?": "AI stands for Artificial Intelligence...",
@@ -75,7 +85,7 @@ def recognize_speech():
         # Search knowledge base
         chatbot_response = find_best_match(text)
 
-        return jsonify({"text": text, "chatbot_response": chatbot_response})
+        return jsonify({"chatbot_response": chatbot_response})
 
     except sr.UnknownValueError:
         return jsonify({"error": "Could not understand audio"}), 400
