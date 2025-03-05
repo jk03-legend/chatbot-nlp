@@ -1,4 +1,6 @@
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import faiss
 import numpy as np
 from flask import Flask, request, jsonify
