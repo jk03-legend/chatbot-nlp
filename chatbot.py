@@ -10,8 +10,9 @@ CORS(app)
 cache = {}
 
 # Load NLP models
-qa_pipeline = pipeline("question-answering")  # Question Answering Model
-sentiment_analyzer = pipeline("sentiment-analysis")  # Sentiment Analysis
+sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+qa_pipeline = pipeline("question-answering", model="deepset/roberta-base-squad2")  # Example for Q&A
+ner_model = pipeline("ner", model="dbmdz/bert-large-cased-finetuned-conll03-english")
 
 # Knowledge Base (Static)
 knowledge_base = {
