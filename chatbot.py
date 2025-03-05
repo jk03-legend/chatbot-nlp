@@ -1,3 +1,4 @@
+import os
 import faiss
 import numpy as np
 from flask import Flask, request, jsonify
@@ -8,17 +9,44 @@ from sentence_transformers import SentenceTransformer
 app = Flask(__name__)
 CORS(app)
 
-# Load model & FAISS index
+# Load embedding model
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-index = faiss.read_index("knowledge_base.index")
-knowledge_questions = np.load("knowledge_questions.npy", allow_pickle=True)
 
-# Load predefined answers
+# Knowledge Base (Modify/Add More)
 knowledge_base = {
     "what is AI?": "AI stands for Artificial Intelligence...",
     "who created you?": "I was created by an amazing developer!",
     "how does speech recognition work?": "Speech recognition converts spoken words into text..."
 }
+
+# Check if FAISS index exists; if not, create it
+INDEX_FILE = "knowledge_base.index"
+QUESTIONS_FILE = "knowledge_questions.npy"
+
+def create_faiss_index():
+    print("Generating FAISS index...")
+
+    # Convert questions into embeddings
+    questions = list(knowledge_base.keys())
+    question_vectors = np.array([embedding_model.encode(q) for q in questions]).astype("float32")
+
+    # Create FAISS index
+    index = faiss.IndexFlatL2(question_vectors.shape[1])
+    index.add(question_vectors)
+
+    # Save index & questions
+    faiss.write_index(index, INDEX_FILE)
+    np.save(QUESTIONS_FILE, questions)
+
+    print("FAISS index created successfully!")
+
+# Ensure index exists before loading
+if not os.path.exists(INDEX_FILE) or not os.path.exists(QUESTIONS_FILE):
+    create_faiss_index()
+
+# Load FAISS index
+index = faiss.read_index(INDEX_FILE)
+knowledge_questions = np.load(QUESTIONS_FILE, allow_pickle=True)
 
 def find_best_match(query):
     """Find the closest question in the knowledge base."""
@@ -55,4 +83,4 @@ def recognize_speech():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000)
