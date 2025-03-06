@@ -16,7 +16,7 @@ CORS(app)
 embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L12-v2")
 
 # Load a lightweight chatbot model
-chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-v0.1", max_length=50)
+chatbot = pipeline("text-generation", model="HuggingFaceH4/zephyr-7b-beta", device="cpu", max_new_tokens=50)
 
 # Knowledge Base (Modify/Add More)
 knowledge_base = {
