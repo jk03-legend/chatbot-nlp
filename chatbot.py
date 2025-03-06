@@ -7,12 +7,16 @@ from flask import Flask, request, jsonify
 import speech_recognition as sr
 from flask_cors import CORS
 from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 
 app = Flask(__name__)
 CORS(app)
 
 # Load embedding model
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L12-v2")
+
+# Load a lightweight chatbot model
+chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-v0.1", max_length=50)
 
 # Knowledge Base (Modify/Add More)
 knowledge_base = {
@@ -73,9 +77,14 @@ def recognize_speech():
         text = recognizer.recognize_google(audio, language="en-US").lower()
 
         # Search knowledge base
-        chatbot_response = find_best_match(text)
+        if best_match:
+            return knowledge_base.get(best_match, "I don't have an answer for that.")
+        else:
+            chatbot_response = chatbot(query)[0]["generated_text"]
+            return chatbot_response
 
-        return jsonify({"text": text, "chatbot_response": chatbot_response})
+
+        return jsonify({"chatbot_response": chatbot_response})
 
     except sr.UnknownValueError:
         return jsonify({"error": "Could not understand audio"}), 400
